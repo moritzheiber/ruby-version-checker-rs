@@ -7,7 +7,7 @@ COPY . /project/
 # hadolint ignore=DL3018
 RUN --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,sharing=private,target=/build/target \
+    --mount=type=cache,sharing=private,target=/project/target \
     apk --no-cache add build-base musl-dev && \
     cargo build --release
 
