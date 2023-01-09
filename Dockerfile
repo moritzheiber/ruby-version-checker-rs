@@ -9,10 +9,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,sharing=private,target=/project/target \
     apk --no-cache add build-base musl-dev && \
-    cargo build --release
+    cargo build --release && \
+    cp -v target/release/ruby-version-checker /ruby-version-checker
 
 FROM scratch
-COPY --from=builder /project/target/release/ruby-version-checker /ruby-version-checker
+COPY --from=builder /ruby-version-checker /ruby-version-checker
 
 LABEL maintainer="Moritz Heiber <hello@heiber.im>"
 LABEL org.opencontainers.image.source=https://github.com/moritzheiber/ruby-version-checker-rs
