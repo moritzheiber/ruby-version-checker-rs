@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile
-FROM rust:1.67-alpine3.17 as builder
+FROM rust:1.68-alpine3.17 as builder
 
 WORKDIR /project
 COPY . /project/
