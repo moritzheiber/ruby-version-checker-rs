@@ -21,7 +21,7 @@ tokio = { version = "1", features = ["full"] }
 regex = "1"
 semver = { version = "1.0.17", features = ["std", "serde"] }
 async-trait = "0.1.68"
-serde_json = "1.0.94"
+serde_json = "1.0.95"
 
 [dev-dependencies]
 http = "0.2.9"
