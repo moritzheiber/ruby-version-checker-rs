@@ -8,7 +8,8 @@ use semver::Version as SemVerVersion;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
-const VERSION_RANGE: Range<u64> = 0..99;
+const MINOR_RANGE: Range<u64> = 1..99;
+const PATCH_RANGE: Range<u64> = 0..99;
 
 #[derive(Debug, Serialize, Deserialize, Eq, Clone)]
 pub struct Release {
@@ -54,8 +55,8 @@ impl Release {
 
 fn is_regular_release(r: &SemVerVersion) -> bool {
     r.major == 3
-        && VERSION_RANGE.contains(&r.minor)
-        && VERSION_RANGE.contains(&r.patch)
+        && MINOR_RANGE.contains(&r.minor)
+        && PATCH_RANGE.contains(&r.patch)
         && r.pre.is_empty()
 }
 
@@ -84,7 +85,7 @@ pub async fn parse_data(csv: &str) -> Result<Vec<Release>, Box<dyn Error>> {
 
 pub async fn latest_versions(versions: Vec<Release>) -> Vec<Release> {
     let mut releases: Vec<Release> = vec![];
-    for number in VERSION_RANGE {
+    for number in MINOR_RANGE {
         let mut v = versions.clone();
         v.retain(|r| r.version.minor == number);
         v.sort();
@@ -137,7 +138,7 @@ mod test {
             first.version,
             SemVerVersion {
                 major: 3,
-                minor: 0,
+                minor: 1,
                 patch: 0,
                 pre: semver::Prerelease::new("").unwrap(),
                 build: semver::BuildMetadata::EMPTY,
@@ -146,11 +147,11 @@ mod test {
 
         let latest = latest_versions(releases).await;
         assert_eq!(latest.len(), 3);
-        assert_eq!(latest[0].version.minor, 0);
-        assert_eq!(latest[1].version.minor, 1);
-        assert_eq!(latest[2].version.minor, 2);
-        assert_eq!(latest[0].version.patch, 5);
-        assert_eq!(latest[1].version.patch, 3);
+        assert_eq!(latest[0].version.minor, 1);
+        assert_eq!(latest[1].version.minor, 2);
+        assert_eq!(latest[2].version.minor, 3);
+        assert_eq!(latest[0].version.patch, 4);
+        assert_eq!(latest[1].version.patch, 2);
         assert_eq!(latest[2].version.patch, 0);
     }
 
@@ -179,12 +180,12 @@ ruby-3.1.1	https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.1.tar.gz	289cbb9eae
         let releases = convert_to_versions(good_data());
         let latest = latest_versions(releases).await;
         assert_eq!(latest.len(), 3);
-        assert_eq!(latest[0].version.minor, 0);
-        assert_eq!(latest[1].version.minor, 1);
-        assert_eq!(latest[2].version.minor, 2);
-        assert_eq!(latest[0].version.patch, 16);
-        assert_eq!(latest[1].version.patch, 12);
-        assert_eq!(latest[2].version.patch, 11);
+        assert_eq!(latest[0].version.minor, 1);
+        assert_eq!(latest[1].version.minor, 2);
+        assert_eq!(latest[2].version.minor, 3);
+        assert_eq!(latest[0].version.patch, 12);
+        assert_eq!(latest[1].version.patch, 11);
+        assert_eq!(latest[2].version.patch, 12);
     }
 
     fn convert_to_versions(data: Vec<Data>) -> Vec<Release> {
@@ -202,13 +203,13 @@ ruby-3.1.1	https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.1.tar.gz	289cbb9eae
     fn good_data() -> Vec<Data> {
         let mut releases = vec![];
         for (version, url) in &[
+            ("3.3.0", good_url()),
+            ("3.3.12", good_url()),
             ("3.2.0", good_url()),
             ("3.2.11", good_url()),
             ("3.2.2", good_url()),
             ("3.1.0", good_url()),
             ("3.1.12", good_url()),
-            ("3.0.5", good_url()),
-            ("3.0.16", good_url()),
         ] {
             releases.push(Data { version, url })
         }
@@ -223,6 +224,8 @@ ruby-3.1.1	https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.1.tar.gz	289cbb9eae
             ("3.2.0-preview1", one_bad_url()),
             ("3.2.0-rc2", one_bad_url()),
             ("3.1.5-something", one_bad_url()),
+            ("3.0.5", good_url()),
+            ("3.0.16", good_url()),
         ] {
             data.push(Data { version, url })
         }
@@ -240,7 +243,7 @@ ruby-3.1.1	https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.1.tar.gz	289cbb9eae
     }
 
     fn good_url() -> &'static str {
-        "https://cache.ruby-lang.org/pub/ruby/3.0/ruby-3.0.2.tar.gz"
+        "https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.4.tar.gz"
     }
 
     fn one_bad_url() -> &'static str {
