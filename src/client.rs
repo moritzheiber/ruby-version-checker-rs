@@ -23,7 +23,7 @@ impl HttpClient for reqwest::Client {
 #[cfg(test)]
 mod test {
     use super::*;
-    use http::Response as HttpResponse;
+    use http::response::Response as HttpResponse;
     use reqwest::{Method, StatusCode, Url};
     use std::{fs, str::FromStr};
 
