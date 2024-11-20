@@ -21,7 +21,7 @@ tokio = { version = "1", features = ["full"] }
 regex = "1"
 semver = { version = "1.0.23", features = ["std", "serde"] }
 async-trait = "0.1.83"
-serde_json = "1.0.132"
+serde_json = "1.0.133"
 
 [dev-dependencies]
 # reqwest doesn't like http 1.x yet
