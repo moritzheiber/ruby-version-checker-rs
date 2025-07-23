@@ -26,4 +26,4 @@ serde_json = "1.0.141"
 [dev-dependencies]
 # reqwest doesn't like http 1.x yet
 http = "1"
-rand = "0.9.1"
+rand = "0.9.2"
