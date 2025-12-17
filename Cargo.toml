@@ -13,7 +13,7 @@ opt-level = "z"
 [dependencies]
 csv = "1.4"
 serde = { version = "1", features = ["derive"] }
-reqwest = { version = "0.12.25", default-features = false, features = [
+reqwest = { version = "0.12.26", default-features = false, features = [
     "json",
     "rustls-tls",
 ] }
