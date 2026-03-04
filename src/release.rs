@@ -101,7 +101,7 @@ pub async fn latest_versions(versions: Vec<Release>) -> Vec<Release> {
 mod test {
     use super::*;
 
-    use rand::prelude::*;
+    use rand::RngExt;
     use std::fs;
 
     struct Data {
@@ -247,9 +247,9 @@ ruby-3.1.1	https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.1.tar.gz	289cbb9eae
     }
 
     fn one_bad_url() -> &'static str {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let urls = bad_urls();
-        let index = rng.gen_range(0..urls.len());
+        let index = rng.random_range(0..urls.len());
         urls[index]
     }
 
