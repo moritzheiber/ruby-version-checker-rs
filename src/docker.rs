@@ -146,11 +146,17 @@ struct TagList {
     tags: Vec<String>,
 }
 
-/// The token endpoint response body.
+/// The token endpoint response body; registries may send `token`, `access_token`, or both.
 #[derive(Deserialize)]
 struct TokenResponse {
-    #[serde(alias = "access_token")]
-    token: String,
+    token: Option<String>,
+    access_token: Option<String>,
+}
+
+impl TokenResponse {
+    fn into_token(self) -> Option<String> {
+        self.token.or(self.access_token)
+    }
 }
 
 /// The repository tags that resolve to a regular Ruby release, sorted by version.
@@ -288,8 +294,11 @@ impl Registry {
             .error_for_status()?
             .text()
             .await?;
-        let token: TokenResponse = serde_json::from_str(&body)?;
-        Ok(token.token)
+        let response: TokenResponse = serde_json::from_str(&body)?;
+        match response.into_token() {
+            Some(token) => Ok(token),
+            None => Err("registry token response contained no token".into()),
+        }
     }
 }
 
@@ -514,6 +523,21 @@ mod test {
         assert!(Credentials::new(Some("u".into()), None).is_none());
         assert!(Credentials::new(None, Some("p".into())).is_none());
         assert!(Credentials::new(None, None).is_none());
+    }
+
+    // --- Token response ------------------------------------------------------
+
+    #[test]
+    fn token_response_accepts_token_and_access_token() {
+        let both: TokenResponse =
+            serde_json::from_str(r#"{"token":"a","access_token":"a"}"#).unwrap();
+        assert_eq!(both.into_token().as_deref(), Some("a"));
+
+        let token_only: TokenResponse = serde_json::from_str(r#"{"token":"a"}"#).unwrap();
+        assert_eq!(token_only.into_token().as_deref(), Some("a"));
+
+        let access_only: TokenResponse = serde_json::from_str(r#"{"access_token":"b"}"#).unwrap();
+        assert_eq!(access_only.into_token().as_deref(), Some("b"));
     }
 
     // --- Registry handshake (mocked HTTP) ------------------------------------
