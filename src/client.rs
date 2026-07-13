@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use reqwest::{Error, Request, Response};
 
-pub async fn fetch_data<C>(request: Request, client: &mut C) -> Result<String, Error>
+pub async fn fetch_data<C>(request: Request, client: &C) -> Result<String, Error>
 where
     C: HttpClient,
 {
@@ -10,12 +10,12 @@ where
 
 #[async_trait]
 pub trait HttpClient {
-    async fn send_request(&mut self, request: Request) -> Result<Response, Error>;
+    async fn send_request(&self, request: Request) -> Result<Response, Error>;
 }
 
 #[async_trait]
 impl HttpClient for reqwest::Client {
-    async fn send_request(&mut self, request: Request) -> Result<Response, Error> {
+    async fn send_request(&self, request: Request) -> Result<Response, Error> {
         self.execute(request).await
     }
 }
@@ -31,7 +31,7 @@ mod test {
 
     #[async_trait]
     impl HttpClient for MockClient {
-        async fn send_request(&mut self, _request: Request) -> Result<Response, Error> {
+        async fn send_request(&self, _request: Request) -> Result<Response, Error> {
             let content = fs::read_to_string("test/fixtures/index.txt").unwrap();
             let response = HttpResponse::builder()
                 .status(StatusCode::OK)
@@ -43,12 +43,12 @@ mod test {
 
     #[tokio::test]
     async fn fetch_raw_data() {
-        let mut client = MockClient {};
+        let client = MockClient {};
         let url = Url::from_str("https://some.url").unwrap();
         let request = Request::new(Method::GET, url);
-        let data = fetch_data(request, &mut client).await.unwrap();
+        let data = fetch_data(request, &client).await.unwrap();
         let releases = crate::release::parse_data(&data).await.unwrap();
 
-        assert!(releases.first().is_some());
+        assert!(!releases.is_empty());
     }
 }

@@ -1,15 +1,18 @@
 use std::cmp::Ordering;
 use std::error::Error;
 use std::ops::Range;
+use std::process;
 
 use csv::ReaderBuilder;
 use regex::Regex;
+use reqwest::{Client, Method, Request, Url};
 use semver::Version as SemVerVersion;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
 const MINOR_RANGE: Range<u64> = 1..99;
 const PATCH_RANGE: Range<u64> = 0..99;
+const RELEASE_URL: &str = "https://cache.ruby-lang.org/pub/ruby/index.txt";
 
 #[derive(Debug, Serialize, Deserialize, Eq, Clone)]
 pub struct Release {
@@ -53,7 +56,7 @@ impl Release {
     }
 }
 
-fn is_regular_release(r: &SemVerVersion) -> bool {
+pub fn is_regular_release(r: &SemVerVersion) -> bool {
     r.major == 3
         && MINOR_RANGE.contains(&r.minor)
         && PATCH_RANGE.contains(&r.patch)
@@ -97,10 +100,34 @@ pub async fn latest_versions(versions: Vec<Release>) -> Vec<Release> {
     releases
 }
 
+/// Run the `check` subcommand, printing the latest regular releases as JSON.
+pub async fn run_check() {
+    let http = Client::builder().https_only(true).build().unwrap();
+    let request = Request::new(Method::GET, Url::parse(RELEASE_URL).unwrap());
+
+    let csv = crate::client::fetch_data(request, &http)
+        .await
+        .expect("Unable to fetch CSV data from the Ruby server");
+
+    let releases = match parse_data(&csv).await {
+        Ok(r) => r,
+        Err(err) => {
+            eprintln!("Error parsing data: {err}");
+            process::exit(1);
+        }
+    };
+
+    let latest = latest_versions(releases).await;
+    let json = serde_json::to_string_pretty(&latest)
+        .expect("Unable to serialize releases into JSON structure");
+    println!("{json}");
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
 
+    use crate::test_support::{BAD_VERSIONS, GOOD_VERSIONS};
     use rand::RngExt;
     use std::fs;
 
@@ -201,35 +228,23 @@ ruby-3.1.1	https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.1.tar.gz	289cbb9eae
     }
 
     fn good_data() -> Vec<Data> {
-        let mut releases = vec![];
-        for (version, url) in &[
-            ("3.3.0", good_url()),
-            ("3.3.12", good_url()),
-            ("3.2.0", good_url()),
-            ("3.2.11", good_url()),
-            ("3.2.2", good_url()),
-            ("3.1.0", good_url()),
-            ("3.1.12", good_url()),
-        ] {
-            releases.push(Data { version, url })
-        }
-
-        releases
+        GOOD_VERSIONS
+            .iter()
+            .map(|&version| Data {
+                version,
+                url: good_url(),
+            })
+            .collect()
     }
 
     fn bad_data() -> Vec<Data> {
-        let mut data = vec![];
-        for (version, url) in &[
-            ("2.7.0", one_bad_url()),
-            ("3.2.0-preview1", one_bad_url()),
-            ("3.2.0-rc2", one_bad_url()),
-            ("3.1.5-something", one_bad_url()),
-            ("3.0.5", good_url()),
-            ("3.0.16", good_url()),
-        ] {
-            data.push(Data { version, url })
-        }
-        data
+        BAD_VERSIONS
+            .iter()
+            .map(|&version| Data {
+                version,
+                url: good_url(),
+            })
+            .collect()
     }
 
     fn good_and_bad_data_with_bad_urls() -> Vec<Data> {
