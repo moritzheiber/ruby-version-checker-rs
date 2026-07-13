@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::error::Error;
-use std::ops::Range;
+use std::ops::RangeInclusive;
 use std::process;
 
 use csv::ReaderBuilder;
@@ -10,8 +10,25 @@ use semver::Version as SemVerVersion;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
-const MINOR_RANGE: Range<u64> = 1..99;
-const PATCH_RANGE: Range<u64> = 0..99;
+/// A supported Ruby major release line and the minor versions still maintained for it.
+struct SupportedMajor {
+    major: u64,
+    minors: RangeInclusive<u64>,
+}
+
+/// Per-major support policy. Minor ranges differ between majors because older
+/// minor lines reach end-of-life at different points for each major.
+const SUPPORTED_MAJORS: &[SupportedMajor] = &[
+    SupportedMajor {
+        major: 3,
+        minors: 2..=99,
+    },
+    SupportedMajor {
+        major: 4,
+        minors: 0..=99,
+    },
+];
+const PATCH_RANGE: RangeInclusive<u64> = 0..=99;
 const RELEASE_URL: &str = "https://cache.ruby-lang.org/pub/ruby/index.txt";
 
 #[derive(Debug, Serialize, Deserialize, Eq, Clone)]
@@ -57,8 +74,9 @@ impl Release {
 }
 
 pub fn is_regular_release(r: &SemVerVersion) -> bool {
-    r.major == 3
-        && MINOR_RANGE.contains(&r.minor)
+    SUPPORTED_MAJORS
+        .iter()
+        .any(|m| m.major == r.major && m.minors.contains(&r.minor))
         && PATCH_RANGE.contains(&r.patch)
         && r.pre.is_empty()
 }
@@ -88,12 +106,14 @@ pub async fn parse_data(csv: &str) -> Result<Vec<Release>, Box<dyn Error>> {
 
 pub async fn latest_versions(versions: Vec<Release>) -> Vec<Release> {
     let mut releases: Vec<Release> = vec![];
-    for number in MINOR_RANGE {
-        let mut v = versions.clone();
-        v.retain(|r| r.version.minor == number);
-        v.sort();
-        if let Some(r) = v.last() {
-            releases.push(r.to_owned())
+    for supported in SUPPORTED_MAJORS {
+        for minor in supported.minors.clone() {
+            let mut v = versions.clone();
+            v.retain(|r| r.version.major == supported.major && r.version.minor == minor);
+            v.sort();
+            if let Some(r) = v.last() {
+                releases.push(r.to_owned())
+            }
         }
     }
 
@@ -165,7 +185,7 @@ mod test {
             first.version,
             SemVerVersion {
                 major: 3,
-                minor: 1,
+                minor: 2,
                 patch: 0,
                 pre: semver::Prerelease::new("").unwrap(),
                 build: semver::BuildMetadata::EMPTY,
@@ -173,20 +193,16 @@ mod test {
         );
 
         let latest = latest_versions(releases).await;
-        assert_eq!(latest.len(), 3);
-        assert_eq!(latest[0].version.minor, 1);
-        assert_eq!(latest[1].version.minor, 2);
-        assert_eq!(latest[2].version.minor, 3);
-        assert_eq!(latest[0].version.patch, 4);
-        assert_eq!(latest[1].version.patch, 2);
-        assert_eq!(latest[2].version.patch, 0);
+        let versions: Vec<String> = latest.iter().map(|r| r.version.to_string()).collect();
+        // 3.0.x/3.1.x are end-of-life; 3.2+ and 4.0 lines remain.
+        assert_eq!(versions, ["3.2.11", "3.3.11", "3.4.10", "4.0.5"]);
     }
 
     #[tokio::test]
     async fn parse_one_line_correctly() {
         let line = "\
 name	url	sha1	sha256	sha512
-ruby-3.1.1	https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.1.tar.gz	289cbb9eae338bdaf99e376ac511236e39be83a3	fe6e4782de97443978ddba8ba4be38d222aa24dc3e3f02a6a8e7701c0eeb619d	a60d69d35d6d4ad8926b324a6092f962510183d9759b096ba4ce9db2e254e0f436030c2a62741352efe72aec5ca2329b45edd85cca8ad3254a9c57e3d8f66319
+ruby-3.2.1	https://cache.ruby-lang.org/pub/ruby/3.2/ruby-3.2.1.tar.gz	289cbb9eae338bdaf99e376ac511236e39be83a3	fe6e4782de97443978ddba8ba4be38d222aa24dc3e3f02a6a8e7701c0eeb619d	a60d69d35d6d4ad8926b324a6092f962510183d9759b096ba4ce9db2e254e0f436030c2a62741352efe72aec5ca2329b45edd85cca8ad3254a9c57e3d8f66319
 ";
         let releases = parse_data(line).await.unwrap();
         let release = releases.first().unwrap();
@@ -194,7 +210,7 @@ ruby-3.1.1	https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.1.tar.gz	289cbb9eae
             release.version,
             SemVerVersion {
                 major: 3,
-                minor: 1,
+                minor: 2,
                 patch: 1,
                 pre: semver::Prerelease::default(),
                 build: semver::BuildMetadata::EMPTY,
@@ -206,13 +222,9 @@ ruby-3.1.1	https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.1.tar.gz	289cbb9eae
     async fn returns_latest_versions() {
         let releases = convert_to_versions(good_data());
         let latest = latest_versions(releases).await;
-        assert_eq!(latest.len(), 3);
-        assert_eq!(latest[0].version.minor, 1);
-        assert_eq!(latest[1].version.minor, 2);
-        assert_eq!(latest[2].version.minor, 3);
-        assert_eq!(latest[0].version.patch, 12);
-        assert_eq!(latest[1].version.patch, 11);
-        assert_eq!(latest[2].version.patch, 12);
+        let versions: Vec<String> = latest.iter().map(|r| r.version.to_string()).collect();
+        // One entry per (major, minor) line, highest patch, ordered by version.
+        assert_eq!(versions, ["3.2.11", "3.3.12", "4.0.5", "4.1.0", "4.2.7"]);
     }
 
     fn convert_to_versions(data: Vec<Data>) -> Vec<Release> {
